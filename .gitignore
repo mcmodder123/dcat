@@ -1,0 +1,49 @@
+# Build artifacts
+*.o
+*.lo
+*.la
+.deps/
+.libs/
+
+# Executables
+src/dcat
+
+# Generated files from autotools
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache/
+compile
+config.h
+config.h.in
+config.log
+config.status
+depcomp
+install-sh
+missing
+stamp-h1
+
+# Generated directories
+autom4te.cache/
+
+# Test files
+test*.txt
+perf_test.txt
+large_fib_test.txt
+fib_test.txt
+file*.txt
+
+# Backup files
+*~
+*.bak
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.tmp
