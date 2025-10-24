@@ -1,3 +1,23 @@
+/*  dcat - A simpler and more advanced implementaiton of `cat`.
+    Copyright (C) 2025  Juan Manuel Rodriguez.
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>. */
+
+#ifndef AUTHOR
+#define AUTHOR "Juan Manuel Rodriguez"
+#endif
+
 #include <config.h>
 #include <ctype.h>
 #include <errno.h>
@@ -6,14 +26,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#ifndef PROGRAM_NAME
-#define PROGRAM_NAME "dcat"
-#endif
-
-#ifndef VERSION
-#define VERSION "1.0"
-#endif
 
 /* Options */
 static struct option const long_options[] = {
@@ -24,10 +36,9 @@ static struct option const long_options[] = {
     {"squeeze-blank", no_argument, NULL, 's'},
     {"show-tabs", no_argument, NULL, 'T'},
     {"show-nonprinting", no_argument, NULL, 'v'},
-    {"buffer-size", required_argument, NULL, 256}, /* New: custom buffer size */
-    {"progress", no_argument, NULL,
-     257}, /* New: show progress for large files */
-    {"hex-dump", no_argument, NULL, 258}, /* New: hex dump mode */
+    {"buffer-size", required_argument, NULL, 256},
+    {"progress", no_argument, NULL, 257},
+    {"hex-dump", no_argument, NULL, 258},
     {"help", no_argument, NULL, 'h'},
     {"version", no_argument, NULL, 'V'},
     {NULL, 0, NULL, 0}};
@@ -44,8 +55,8 @@ static size_t custom_buffer_size = 0; /* 0 means use default */
 static int show_progress = 0;
 static int hex_dump_mode = 0;
 
-/* Buffer size for efficient I/O - increased for maximum performance */
-#define DEFAULT_BUFFER_SIZE 262144 /* 256KB buffer for optimal I/O */
+/* Buffer size for optimal I/O */
+#define DEFAULT_BUFFER_SIZE 4194304 /* 4MB buffer */
 
 /* Hex dump a buffer */
 static void hex_dump(const unsigned char *buffer, size_t length,
@@ -83,9 +94,9 @@ static void hex_dump(const unsigned char *buffer, size_t length,
 
 static void usage(int status) {
   if (status != 0) {
-    fprintf(stderr, "Try '%s --help' for more information.\n", PROGRAM_NAME);
+    fprintf(stderr, "Try '%s --help' for more information.\n", PACKAGE_NAME);
   } else {
-    printf("Usage: %s [OPTION]... [FILE]...\n", PROGRAM_NAME);
+    printf("Usage: %s [OPTION]... [FILE]...\n", PACKAGE_NAME);
     printf("Concatenate FILE(s) to standard output.\n\n");
     printf("With no FILE, or when FILE is -, read standard input.\n\n");
     printf("  -A, --show-all           equivalent to -vET\n");
@@ -109,67 +120,104 @@ static void usage(int status) {
     printf("Examples:\n");
     printf("  %s f - g  Output f's contents, then standard input, then g's "
            "contents.\n",
-           PROGRAM_NAME);
+           PACKAGE_NAME);
     printf("  %s        Copy standard input to standard output.\n\n",
-           PROGRAM_NAME);
+           PACKAGE_NAME);
     printf("GNU coreutils online help: "
            "<https://www.gnu.org/software/coreutils/>\n");
     printf("Full documentation <https://www.gnu.org/software/coreutils/%s>\n",
-           PROGRAM_NAME);
+           PACKAGE_NAME);
     printf("or available locally via: info '(coreutils) %s invocation'\n",
-           PROGRAM_NAME);
+           PACKAGE_NAME);
   }
   exit(status);
 }
 
 static void version(void) {
-  printf("%s %s\n", PROGRAM_NAME, VERSION);
+  printf("%s %s\n", PACKAGE_NAME, VERSION);
   printf("Copyright (C) 2025 Juan Manuel Rodriguez.\n");
   printf("License GPLv3+: GNU GPL version 3 or later "
          "<https://gnu.org/licenses/gpl.html>.\n");
   printf(
       "This is free software: you are free to change and redistribute it.\n");
   printf("There is NO WARRANTY, to the extent permitted by law.\n\n");
-  printf("Written by %s.\n", PROGRAM_NAME);
+  printf("Written by %s.\n", AUTHOR);
   exit(0);
 }
 
-/* Output a character with special handling for non-printing chars */
-static void output_char(unsigned char c, int *line_pos) {
-  int show_special = show_nonprinting || show_all;
+/* Process a buffer line by line, applying formatting options */
+static void process_buffer_line_by_line(const char *buffer, size_t size,
+                                        unsigned long *line_num,
+                                        int *last_char_was_newline,
+                                        int *consecutive_blank_lines) {
+  const char *ptr = buffer;
+  const char *end = buffer + size;
 
-  if (show_special && c != '\t' && c != '\n') {
-    /* Handle non-printing characters except tab and newline */
-    if (c < 32) {
-      putchar('^');
-      putchar(c + 64);
-    } else if (c == 127) {
-      putchar('^');
-      putchar('?');
-    } else if (c >= 128) {
-      putchar('M');
-      putchar('-');
-      if (c < 128 + 32) {
-        putchar('^');
-        putchar(c - 128 + 64);
-      } else if (c == 255) {
-        putchar('^');
-        putchar('?');
-      } else {
-        putchar(c - 128);
-      }
-    } else {
-      putchar(c);
+  while (ptr < end) {
+    const char *line_start = ptr;
+    const char *line_end = memchr(ptr, '\n', end - ptr);
+
+    if (line_end == NULL) {
+      line_end = end;
     }
-  } else if (show_tabs && c == '\t') {
-    putchar('^');
-    putchar('I');
-  } else {
-    putchar(c);
-  }
 
-  if (line_pos) {
-    (*line_pos)++;
+    size_t line_length = line_end - line_start;
+
+    if (line_length == 0) {
+      (*consecutive_blank_lines)++;
+    } else {
+      *consecutive_blank_lines = 0;
+    }
+
+    if (squeeze_blank && *consecutive_blank_lines > 1) {
+      ptr = line_end + 1;
+      if (line_end < end) {
+        *last_char_was_newline = 1;
+      }
+      continue;
+    }
+
+    /* Number lines */
+    if (number_lines) {
+      if (*last_char_was_newline) {
+        fprintf(stdout, "%6lu\t", ++(*line_num));
+      }
+    } else if (number_nonblank && line_length > 0) {
+      if (*last_char_was_newline) {
+        fprintf(stdout, "%6lu\t", ++(*line_num));
+      }
+    }
+
+    /* Process and print the line content */
+    for (size_t i = 0; i < line_length; ++i) {
+      unsigned char c = line_start[i];
+      if (show_tabs && c == '\t') {
+        printf("^I");
+      } else if (show_nonprinting && (c < 32 || c > 126) && c != '\n' &&
+                 c != '\t') {
+        if (c < 32) {
+          printf("^%c", c + 64);
+        } else if (c == 127) {
+          printf("^?");
+        } else {
+          printf("M-^%c", c - 128 + 64);
+        }
+      } else {
+        putchar(c);
+      }
+    }
+
+    if (line_end < end) {
+      if (show_ends) {
+        putchar('$');
+      }
+      putchar('\n');
+      *last_char_was_newline = 1;
+      ptr = line_end + 1;
+    } else {
+      *last_char_was_newline = 0;
+      ptr = line_end;
+    }
   }
 }
 
@@ -185,7 +233,7 @@ static int process_file(FILE *fp, const char *filename,
     unsigned long offset = 0;
 
     if (!buffer) {
-      fprintf(stderr, "%s: memory allocation failed\n", PROGRAM_NAME);
+      fprintf(stderr, "%s: memory allocation failed\n", PACKAGE_NAME);
       return 1;
     }
 
@@ -196,7 +244,7 @@ static int process_file(FILE *fp, const char *filename,
 
     free(buffer);
     if (ferror(fp)) {
-      fprintf(stderr, "%s: %s: %s\n", PROGRAM_NAME, filename, strerror(errno));
+      fprintf(stderr, "%s: %s: %s\n", PACKAGE_NAME, filename, strerror(errno));
       return 1;
     }
     return 0;
@@ -206,19 +254,30 @@ static int process_file(FILE *fp, const char *filename,
   if (!show_all && !number_nonblank && !show_ends && !number_lines &&
       !squeeze_blank && !show_tabs && !show_nonprinting) {
     char *buffer = malloc(buffer_size);
+    char *stdout_buffer = malloc(buffer_size);
     size_t bytes_read;
     size_t total_bytes = 0;
 
-    if (!buffer) {
-      fprintf(stderr, "%s: memory allocation failed\n", PROGRAM_NAME);
+    if (!buffer || !stdout_buffer) {
+      fprintf(stderr, "%s: memory allocation failed\n", PACKAGE_NAME);
+      free(buffer);
+      free(stdout_buffer);
       return 1;
+    }
+
+    /* Optimize buffering for maximum throughput - use unbuffered for raw speed
+     */
+    if (setvbuf(stdout, NULL, _IONBF, 0) != 0) {
+      /* Fall back to default buffering if setvbuf fails */
+      /* Keep stdout_buffer allocated but unused */
     }
 
     /* Pure throughput mode - no processing, just copy */
     while ((bytes_read = fread(buffer, 1, buffer_size, fp)) > 0) {
       if (fwrite(buffer, 1, bytes_read, stdout) != bytes_read) {
-        fprintf(stderr, "%s: write error\n", PROGRAM_NAME);
+        fprintf(stderr, "%s: write error\n", PACKAGE_NAME);
         free(buffer);
+        free(stdout_buffer);
         return 1;
       }
       total_bytes += bytes_read;
@@ -237,87 +296,34 @@ static int process_file(FILE *fp, const char *filename,
     }
 
     free(buffer);
+    free(stdout_buffer);
     if (ferror(fp)) {
-      fprintf(stderr, "%s: %s: %s\n", PROGRAM_NAME, filename, strerror(errno));
+      fprintf(stderr, "%s: %s: %s\n", PACKAGE_NAME, filename, strerror(errno));
       return 1;
     }
     return 0;
   }
 
-  /* Character-by-character processing */
-  char *buffer_slow = malloc(buffer_size);
+  /* Line-by-line processing using a buffer */
+  char *buffer = malloc(buffer_size);
   size_t bytes_read;
-  int prev_blank = 0;
-  int line_pos = 0;
-  int in_line = 0;
-  size_t total_bytes = 0;
+  int last_char_was_newline = 1; /* Start with a virtual newline */
+  int consecutive_blank_lines = 0;
 
-  if (!buffer_slow) {
-    fprintf(stderr, "%s: memory allocation failed\n", PROGRAM_NAME);
+  if (!buffer) {
+    fprintf(stderr, "%s: memory allocation failed\n", PACKAGE_NAME);
     return 1;
   }
 
-  while ((bytes_read = fread(buffer_slow, 1, buffer_size, fp)) > 0) {
-    total_bytes += bytes_read;
-    size_t i;
-    for (i = 0; i < bytes_read; i++) {
-      unsigned char c = buffer_slow[i];
-
-      if (c == '\n') {
-        /* End of line */
-        if (show_ends || show_all) {
-          putchar('$');
-        }
-        putchar('\n');
-
-        /* Handle line numbering */
-        if (number_lines || (number_nonblank && in_line)) {
-          (*line_num)++;
-        }
-
-        /* Reset for next line */
-        in_line = 0;
-        line_pos = 0;
-
-        /* Handle blank line squeezing */
-        if (squeeze_blank && prev_blank) {
-          continue;
-        }
-        prev_blank = 1;
-      } else {
-        /* Handle line numbering at start of line */
-        if (!in_line && (number_lines || (number_nonblank && c != '\n'))) {
-          if (number_lines) {
-            fprintf(stdout, "%6lu\t", *line_num + 1);
-          } else if (number_nonblank && c != '\n') {
-            fprintf(stdout, "%6lu\t", *line_num + 1);
-            (*line_num)++;
-          }
-        }
-
-        /* Output character */
-        output_char(c, &line_pos);
-        in_line = 1;
-        prev_blank = 0;
-      }
-    }
-
-    /* Show progress for large files */
-    if (show_progress && total_bytes > 10 * 1024 * 1024) { /* Every 10MB */
-      fprintf(stderr, "\r%s: %lu MB processed", filename,
-              total_bytes / (1024 * 1024));
-      fflush(stderr);
-    }
+  while ((bytes_read = fread(buffer, 1, buffer_size, fp)) > 0) {
+    process_buffer_line_by_line(buffer, bytes_read, line_num,
+                                &last_char_was_newline,
+                                &consecutive_blank_lines);
   }
 
-  if (show_progress && total_bytes > 10 * 1024 * 1024) {
-    fprintf(stderr, "\r%s: %lu MB processed - done\n", filename,
-            total_bytes / (1024 * 1024));
-  }
-
-  free(buffer_slow);
+  free(buffer);
   if (ferror(fp)) {
-    fprintf(stderr, "%s: %s: %s\n", PROGRAM_NAME, filename, strerror(errno));
+    fprintf(stderr, "%s: %s: %s\n", PACKAGE_NAME, filename, strerror(errno));
     return 1;
   }
 
@@ -330,8 +336,7 @@ int main(int argc, char *argv[]) {
   unsigned long line_num = 0;
 
   /* Parse options */
-  while ((opt = getopt_long(argc, argv, "AbEe::n::s::t::T::v::hV", long_options,
-                            NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "AbEnstv", long_options, NULL)) != -1) {
     switch (opt) {
     case 'A':
       show_all = 1;
@@ -341,22 +346,18 @@ int main(int argc, char *argv[]) {
       break;
     case 'b':
       number_nonblank = 1;
+      number_lines = 0; /* -b overrides -n */
       break;
     case 'E':
       show_ends = 1;
       break;
-    case 'e':
-      show_nonprinting = 1;
-      show_ends = 1;
-      break;
     case 'n':
-      number_lines = 1;
+      if (!number_nonblank) {
+        number_lines = 1;
+      }
       break;
     case 's':
       squeeze_blank = 1;
-      break;
-    case 'T':
-      show_tabs = 1;
       break;
     case 't':
       show_nonprinting = 1;
@@ -369,7 +370,7 @@ int main(int argc, char *argv[]) {
       custom_buffer_size = atoi(optarg);
       if (custom_buffer_size < 1024) {
         fprintf(stderr, "%s: buffer size must be at least 1024 bytes\n",
-                PROGRAM_NAME);
+                PACKAGE_NAME);
         exit(1);
       }
       break;
@@ -407,7 +408,7 @@ int main(int argc, char *argv[]) {
       } else {
         fp = fopen(filename, "r");
         if (!fp) {
-          fprintf(stderr, "%s: %s: %s\n", PROGRAM_NAME, filename,
+          fprintf(stderr, "%s: %s: %s\n", PACKAGE_NAME, filename,
                   strerror(errno));
           ret = 1;
           continue;
@@ -426,7 +427,7 @@ int main(int argc, char *argv[]) {
 
   /* Ensure output is flushed */
   if (fflush(stdout) != 0) {
-    fprintf(stderr, "%s: %s\n", PROGRAM_NAME, strerror(errno));
+    fprintf(stderr, "%s: %s\n", PACKAGE_NAME, strerror(errno));
     ret = 1;
   }
 
