@@ -75,7 +75,7 @@ Concatenate FILE(s) to standard output.
 
 `dcat` is a highly optimized implementation of `cat`, designed for maximum throughput. It uses a number of techniques to achieve high performance, including:
 
-- **Large I/O Buffers:** `dcat` uses large buffers (1MB by default) to minimize the number of system calls required for file I/O.
+- **Large I/O Buffers:** `dcat` uses large buffers (4MB by default) to minimize the number of system calls required for file I/O.
 - **Optimized Line Processing:** When formatting options are used, `dcat` processes files in large chunks, which is significantly faster than character-by-character processing.
 - **Fast Path for Simple Concatenation:** When no formatting options are used, `dcat` uses a highly optimized path that directly copies data from the input to the output buffer, resulting in performance comparable to the standard `cat` utility.
 
@@ -85,9 +85,10 @@ Here are some benchmark results comparing `dcat` to the standard `cat` utility o
 
 | Command | `dcat` | `cat` |
 |---|---|---|
-| (no options) | 0.435s | 0.083s |
-| `-n` | 19.453s | 38.625s |
-| `-b` | 19.464s | 38.664s |
+| (no options) | 0.26s | 0.31s |
+| `-n` | 30.83s | 59.70s |
+| `-b` | 31.17s | 60.88s |
+| `-s` | 30.59s | 59.37s |
 
 As you can see, `dcat` is significantly faster than `cat` when using formatting options.
 
