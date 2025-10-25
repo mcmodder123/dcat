@@ -1,0 +1,79 @@
+.TH DCAT 1 "October 2025" "dcat 1.0.0" "User Commands"
+.SH NAME
+dcat - concatenate and display files
+.SH SYNOPSIS
+.B dcat
+[
+.I OPTION
+]... [
+.I FILE
+]...
+.SH DESCRIPTION
+.B dcat
+concatenates
+.I FILE
+(s) to standard output.
+With no
+.I FILE
+, or when
+.I FILE
+is -, read standard input.
+.SH OPTIONS
+.TP
+.B -A, --show-all
+equivalent to -vET
+.TP
+.B -b, --number-nonblank
+number nonempty output lines, overrides -n
+.TP
+.B -e
+equivalent to -vE
+.TP
+.B -E, --show-ends
+display $ at end of each line
+.TP
+.B -n, --number
+number all output lines
+.TP
+.B -s, --squeeze-blank
+suppress repeated empty output lines
+.TP
+.B -t
+equivalent to -vT
+.TP
+.B -T, --show-tabs
+display TAB characters as ^I
+.TP
+.B -v, --show-nonprinting
+use ^ and M- notation, except for LFD and TAB
+.TP
+.B --buffer-size=SIZE
+use SIZE-byte buffer (default 4194304)
+.TP
+.B --progress
+show progress for large files
+.TP
+.B --hex-dump
+show hex dump of binary data
+.TP
+.B --help
+display this help and exit
+.TP
+.B --version
+output version information and exit
+.SH EXAMPLES
+.TP
+.B dcat f - g
+Output f's contents, then standard input, then g's contents.
+.TP
+.B dcat
+Copy standard input to standard output.
+.SH AUTHOR
+Written by Juan Manuel Rodriguez.
+.SH COPYRIGHT
+Copyright (C) 2025 Juan Manuel Rodriguez.
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+.SH SEE ALSO
+.BR cat (1)

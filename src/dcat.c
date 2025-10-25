@@ -123,12 +123,6 @@ static void usage(int status) {
            PACKAGE_NAME);
     printf("  %s        Copy standard input to standard output.\n\n",
            PACKAGE_NAME);
-    printf("GNU coreutils online help: "
-           "<https://www.gnu.org/software/coreutils/>\n");
-    printf("Full documentation <https://www.gnu.org/software/coreutils/%s>\n",
-           PACKAGE_NAME);
-    printf("or available locally via: info '(coreutils) %s invocation'\n",
-           PACKAGE_NAME);
   }
   exit(status);
 }
@@ -146,10 +140,9 @@ static void version(void) {
 }
 
 /* Process a buffer line by line, applying formatting options */
-static void process_buffer_line_by_line(const char *buffer, size_t size,
-                                        unsigned long *line_num,
-                                        int *last_char_was_newline,
-                                        int *consecutive_blank_lines) {
+static void process_buffer(const char *buffer, size_t size,
+                           unsigned long *line_num, int *last_char_was_newline,
+                           int *consecutive_blank_lines) {
   const char *ptr = buffer;
   const char *end = buffer + size;
 
@@ -221,7 +214,7 @@ static void process_buffer_line_by_line(const char *buffer, size_t size,
   }
 }
 
-/* Process a file or stdin - optimized for maximum speed */
+/* Process a file or stdin */
 static int process_file(FILE *fp, const char *filename,
                         unsigned long *line_num) {
   size_t buffer_size = get_buffer_size();
@@ -250,7 +243,7 @@ static int process_file(FILE *fp, const char *filename,
     return 0;
   }
 
-  /* Fast path: no options enabled - direct buffer copy for maximum speed */
+  /* No options enabled */
   if (!show_all && !number_nonblank && !show_ends && !number_lines &&
       !squeeze_blank && !show_tabs && !show_nonprinting) {
     char *buffer = malloc(buffer_size);
@@ -265,14 +258,11 @@ static int process_file(FILE *fp, const char *filename,
       return 1;
     }
 
-    /* Optimize buffering for maximum throughput - use unbuffered for raw speed
-     */
     if (setvbuf(stdout, NULL, _IONBF, 0) != 0) {
       /* Fall back to default buffering if setvbuf fails */
       /* Keep stdout_buffer allocated but unused */
     }
 
-    /* Pure throughput mode - no processing, just copy */
     while ((bytes_read = fread(buffer, 1, buffer_size, fp)) > 0) {
       if (fwrite(buffer, 1, bytes_read, stdout) != bytes_read) {
         fprintf(stderr, "%s: write error\n", PACKAGE_NAME);
@@ -304,7 +294,7 @@ static int process_file(FILE *fp, const char *filename,
     return 0;
   }
 
-  /* Line-by-line processing using a buffer */
+  /* Line-by-line processing */
   char *buffer = malloc(buffer_size);
   size_t bytes_read;
   int last_char_was_newline = 1; /* Start with a virtual newline */
@@ -316,9 +306,8 @@ static int process_file(FILE *fp, const char *filename,
   }
 
   while ((bytes_read = fread(buffer, 1, buffer_size, fp)) > 0) {
-    process_buffer_line_by_line(buffer, bytes_read, line_num,
-                                &last_char_was_newline,
-                                &consecutive_blank_lines);
+    process_buffer(buffer, bytes_read, line_num, &last_char_was_newline,
+                   &consecutive_blank_lines);
   }
 
   free(buffer);
