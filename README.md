@@ -16,7 +16,7 @@ autoreconf -fiv
 # Build the program
 make
 
-#  Install system-wide
+# Install system-wide
 make install
 ```
 
